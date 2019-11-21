@@ -1,0 +1,444 @@
+#!/bin/bash
+#Author: Cory Schmidt
+#Description: Program performs the following operations
+#   matrix dims [MATRIX]
+#   matrix transpose [MATRIX]
+#   matrix mean [MATRIX]
+#   matrix add MATRIX_LEFT MATRIX_RIGHT
+#   matrix multiply MATRIX_LEFT MATRIX_RIGHT
+#Date: 10/13/2019
+
+####################################### START DIMS FUNCTION #######################################
+# NAME
+#   dims - find the dimensions (rows, columns) of a matrix
+# SYNOPSIS
+#   dims MATRIX input
+# DESCRIPTION
+#   Takes input from stdin or a tab delimited file
+#   Outputs the rows ($rows) and columns ($cols) of a matrix
+# TO RUN
+#   Ex: echo -e "1\t2\n3\t4" | matrix dims
+#   Ex: echo -e "1\t2\n3\t4" > m1; ./matrix dims m1
+dims() {
+    input="${1:-/dev/stdin}"        #input variable equal to file or text from stdin
+    rows=0                          #rows variable counts the number of rows
+
+    while read -r line              #while loop counts the number of lines
+    do
+    rows=$(expr $rows + 1)          #rows is incremented by 1 during each iteration
+    if [[ $rows -eq 1 ]]            #if the loop is it on it's first iteration (first row)
+    then
+        a=($line)                   #array variable is filled with contents of line
+        cols=(${#a[*]})             #cols variable is equal to the length of array 
+    fi
+    done < $input                   #end loop when all lines file or stdin have been read
+
+    echo -e "$rows $cols"           #print rows and cols 
+}
+
+####################################### TRANSPOSE FUNCTION #######################################
+# NAME
+#   transpose - transposes a matrix, reflect elements along main diagonal
+# SYNOPSIS
+#   transpose MATRIX input
+# DESCRIPTION
+#   Takes input from stdin or a tab delimited file
+#   Outputs a transposed matrix
+# TO RUN
+#   Ex: echo -e "1\t2\n3\t4" | matrix transpose
+#   Ex: echo -e "1\t2\n3\t4" > m1; ./matrix transpose m1
+#--------------------------------------------EXAMPLE--------------------------------------------#
+#    Ex: "1\t2\t3\t4\n5\t6\t7\t8"
+#    
+#    while loop, read line 1
+#        nested for loop
+#        Ex: i=0; i < 4; array[index=0]=1; index++, i++
+#        Ex: i=1; i < 4; array[index=1]=2; index++, i++
+#        ....
+#        Ex: i=4 BREAK, array = [12345678]
+#    while loop, read line 2
+#        nested for loop
+#        Ex: i=0; i < 4; array[index=0]=5; index++, i++
+#        Ex: i=1; i < 4; array[index=1]=6; index++, i++
+#        ...
+#        Ex: i=4 BREAK, array = [12345678]
+#    end while loop, no lines left
+#
+#     array = [12345678]
+#     row=0; row < 4
+#        j=0; j < 8
+#            echo 1; j=4 \t
+#        j=4; j < 8
+#            echo 5; j=8 \t
+#        j=8; j < 8 BREAK
+#     \n
+#     row=1; row < 4
+#        j=1; j < 8
+#            echo 2; j=5 \t
+#        j=5; j < 8
+#            echo 6; j=9 \t
+#        j=9; j < 8 BREAK
+#     \n
+#     row=2; row < 4
+#        j=2; j < 8
+#            echo 3; j=6 \t
+#        j=6; j < 8
+#            echo 7; j=10 \t
+#        j=11; j < 8 BREAK
+#     \n
+#     row=3; row < 4
+#        j=3; j < 8
+#            echo 4; j=7 \t
+#        j=7; j < 8
+#            echo 8; j=11 \t
+#        j=11; j < 8 BREAK
+#     row=4; row < 4 BREAK
+#----------------------------------------------END----------------------------------------------#
+transpose() {
+    declare -a array=( )                          #declare an empty array
+    input="${1:-/dev/stdin}"                      #input variable equal to file or text from stdin
+
+    read -a line < $input                         #read the first line of the input
+    cols=${#line[@]}                              #cols variable set to rows in file
+    index=0                                       #index variable for array looping
+
+    while read -a line                            #while loop to loop through input
+    do
+        for((i=0; i <cols; i++))                  #for loop to loop through rows               
+        do
+            array[$index]=${line[$i]}             #each number is placed into the array
+            ((index++))                           #update index array[1]...array[2]....
+        done
+    done < $input                                 #loop till end of input
+
+    for((row=0; row<cols; row++))                 
+    do
+        for((j=row; j<${#array[@]}; j+=cols))           #for loop prints columns as rows
+        do
+            printf "%s" ${array[$j]}
+            if [ $j -lt $(( ${#array[@]} - $cols )) ]   #prevent trailing tab
+            then 
+                printf "\t"
+           fi
+        done
+        printf "\n"
+    done
+}
+
+####################################### MEAN FUNCTION #######################################
+# NAME
+#   mean - returns a 1xn vector of the mean values of each column of a matrix
+# SYNOPSIS
+#   mean MATRIX input
+# DESCRIPTION
+#   Takes input from stdin or a tab delimited file
+#   Outputs mean values of all columns of a matrix
+# TO RUN
+#   Ex: echo -e "1\t2\n3\t4" | matrix mean
+#   Ex: echo -e "1\t2\n3\t4" > m1; ./matrix mean m1
+mean() {
+    input="${1:-/dev/stdin}"                    #input variable equal to file or text from stdin
+    
+    if [ $input = /dev/stdin ]                  #handle input
+    then
+        cp /dev/stdin tempfile$$
+        cols=$( head -n 1 $tempfile$$ | wc -w)  #cols variable holds the columns in the original input
+        transpose tempfile$$ > tempmeanfile$$   #call transpose function and place results in temp file
+    elif [ $input = $1 ]
+    then
+        cols=$( head -n 1 $input | wc -w)       #cols variable holds the columns in the original input
+        transpose $input > tempmeanfile$$       #call transpose function and place results in temp file
+    fi
+    
+    index=1                                     #index variable holds the iteration of the while loop
+
+    while read -a line                          #while loop reads the entire file
+    do 
+        count=0                                 #count variable holds the rows count
+        sum=0                                   #sum variable holds the tallied sum 
+        mean=0
+        for i in "${line[@]}"                   #for loop loops through the rows 
+        do
+            ((sum += $i))                       #each number in the row is summed, left with one column
+            ((count++))                         #rows are incremented                
+        done
+        
+        #mean is set equal to the sum divided by the number of rows
+        #rounding equation from project overview
+        ((mean = (sum + (count/2)*((sum>0)*2-1))/count))
+        
+        printf "%s" $mean                      #print mean values
+        
+        if [[ $index -lt $cols ]]              #prevent trailing tab
+        then
+            printf "\t"
+        fi
+        
+        index=$((index+1))                     #increment index variable
+        
+    done < tempmeanfile$$                      #while temp file has not been read
+    printf "\n"
+    
+    rm -f tempfile$$                           #remove tempfile
+    rm -f tempmeanfile$$                       #remove tempmeanfile
+}
+
+####################################### ADD FUNCTION #######################################
+# NAME
+#   add - takes two MxN matrices (same dimensions) and adds them together
+# SYNOPSIS
+#   add MATRIX input input
+# DESCRIPTION
+#   Takes input from tab delimited file
+#   Outputs sum of two MxN matrices
+# TO RUN
+#   Ex: echo -e "1\t2\n3\t4" "1\t2\n3\t4" | matrix mean
+#   Ex: echo -e "1\t2\n3\t4" > m1; "1\t2\n3\t4" > m2; ./matrix mean m1 m2
+#--------------------------------------------EXAMPLE--------------------------------------------#
+#   MATRIX1
+#   1   2   3   4   
+#   5   6   7   8
+#
+#   MATRIX2
+#   1   2   3   4
+#   5   6   7   8
+#   
+#   First iteration  
+#       num1=$( echo "$line1" | cut -f "$i" ), 1
+#       num2=$( echo "$line2" | cut -f "$i" ), 1
+#       sum=$((1+1)), 2
+#
+#   (1+1) (2+2) (3+3) (4+4)
+#   (5+5) (6+6) (7+7) (8+8)
+#
+#   OUTPUT MATRIX
+#   2   4   6   8
+#   10  12  14  16
+#----------------------------------------------END----------------------------------------------#
+add() {
+    matrix1="$1"                          #variable equal to matrix from file
+    matrix2="$2"                          #variable equal to matrix from file
+    dim1=$(dims $matrix1)                 #variable calls the dims function on the first matrix
+    dim2=$(dims $matrix2)                 #variable calls the dims function on the second matrix
+
+    #------------Test matrix compatibility------------#
+    if [[ "$dim1" != "$dim2" ]]
+    then
+        echo Error: matrices must be the same size >&2
+        exit 1
+    fi
+
+    cols=$( head -n 1 $matrix1 | wc -w)  #cols variable holds the columns of both matrices
+    
+    #SOURCE: https://unix.stackexchange.com/questions/26601/how-to-read-from-two-input-files-using-while-loop
+    
+    sum=0           #sum variable holds the sum of num1+num2
+    num1=0          #num1 holds each number from the first matrix
+    num2=0          #num2 holds each number from the second matrix
+    
+    while read line1 <&3 && read line2 <&4          #while loop to loop through both files
+    do
+        i=1                                         #iterator variable
+        while [[ "$i" -le $cols ]]
+        do
+            num1=$( echo "$line1" | cut -f "$i" )   #variable holds each number from the first file  
+            num2=$( echo "$line2" | cut -f "$i" )   #variable holds each number from the second file
+            
+            sum=$((num1+num2))                      #sum each one of number pairs
+            
+            i=$((i+1))                              #iterator variable increments
+            
+            if [[ "$i" -ne $((cols + 1)) ]]         #prevent trailing tabs and print matrix        
+            then
+                printf "%s\t" $sum
+            else
+                printf "%s\n" $sum
+            fi
+        done
+    done 3<$matrix1 4<$matrix2  
+}
+
+####################################### MULTIPLY FUNCTION #################################
+# NAME
+#   multiply - takes one MxN and one NxP matrix and produces an MxP matrix
+# SYNOPSIS
+#   multiply MATRIX input input
+# DESCRIPTION
+#   Takes input from tab delimited file
+#   Outputs MxP matrix
+# TO RUN
+#   Ex: echo -e "1\t2\n3\t4" "1\t2\n3\t4" | matrix multiply
+#   Ex: echo -e "1\t2\n3\t4" > m1; "1\t2\n3\t4" > m2; ./matrix multiply m1 m2  
+#--------------------------------------------EXAMPLE--------------------------------------------#
+#   MATRIX 1
+#   1   2   3   4
+#   5   6   7   8
+#
+#   MATRIX 2
+#   1   2
+#   3   4
+#   5   6
+#   7   8
+#
+#   (1,2,3,4) * (1,3,5,7) = 1*1 + 2*3 + 3*5 + 4*7 = 50
+#   (1,2,3,4) * (2,4,6,8) = 1*2 + 2*4 + 3*6 + 4*8 = 60
+#   (5,6,7,8) * (1,3,5,7) = 5*1 + 6*3 + 7*5 + 8*7 = 114
+#   (5,6,7,8) * (2,4,6,8) = 5*2 + 6*4 + 7*6 + 8*8 = 140
+#
+#   OUTPUT MATRIX
+#   50  60
+#   114 140 
+#
+#   Input
+#   MxN, Rows (M) = 2, Cols (N) = 4
+#   NxP, Rows (N) = 4, Cols (P) = 2
+#
+#   Output
+#   MxP, Rows (M) = 2, Cols (P) = 2
+#----------------------------------------------END----------------------------------------------#
+multiply() {
+
+    matrix1="$1"                          #variable equal to matrix from file
+    matrix2="$2"                          #variable equal to matrix from file
+    
+    rows2=$(wc -l < $matrix2)             #variable holds the rows of matrix2
+    cols1=$( head -n 1 $matrix1 | wc -w)  #variable holds the columns of matrix1
+    cols2=$( head -n 1 $matrix2 | wc -w)  #variable holds the columns of matrix2
+
+    #----------Test matrix compatibility----------#
+    if test $rows2 -ne $cols1
+    then
+        echo Error: expected MxN and NxP matrices >&2
+        exit 1
+    fi
+    
+    product=0                                               #variable holds the product of num1*num2
+    sum=0                                                   #variable holds the sum of all the products
+
+    while read line                                         #while loop reads each line in first matrix
+    do
+        tempRows1=$(tr '\t' '\n' <<< "$line")               #variable transposes each row in matrix1 (change to column)
+        i=0                                                 #incrementor variable
+        
+        while [[ "$i" -ne "$cols2" ]]                       #while the iterator doesn't equal the columns of matrix2
+        do
+            i=$((i+1))                                      #iterator variable increments
+            sum=0                                           #sum variable holds the sum of each iteration
+                
+            tempCols2=$(cut -f $i $matrix2)                 #variable transposes each column in matrix2 (change to row)
+            
+            while read num1 && read num2 <&3                #read each number in each row of matrix1 and each column of matrix2
+            do
+                product=$(($num1*$num2))                    #multiply corresponding numbers
+                sum=$((product+sum))                        #sum each product together for each corresponding row/column 
+            done <<<"$tempRows1" 3<<<"$tempCols2" 
+            
+            if [[ "$i" -ne $cols2 ]]                        #prevent trailing tabs and print matrix        
+            then
+                printf "%s\t" $sum
+            else
+                printf "%s\n" $sum
+            fi
+        done
+    done <$matrix1
+}
+
+############################################# HANDLE INPUT ##################################################
+
+#variables hold the parameters, user input from the console
+input1="$1"                     #excepts an operation (Ex: dims, transponse, mean, add, multiply)                       
+input2="${2:-/dev/stdin}"       #expects a filename or matrix from stdin (Ex: m1 OR "1\t2\n3\t4")      
+input3="${3:-/dev/stdin}"       #expects a filename or matrix from stdin (Ex: m2 OR "1\t2\n3\t4")
+
+#------ Example commands ------#
+#   ./matrix dims m1
+#   echo -e "1\t2\n3\t4" | matrix transpose
+#   ./matrix multiply m1 m2
+#---- End Example commands ----#
+
+#----------------------------------------------------DIMS----------------------------------------------------# 
+if [ $input1 == "dims" ]                                                  #if argument 1 is dims
+then
+    if [[ "$#" -gt 2 ]]                                                   #if arguments are greater than 2
+    then
+        echo Error: expects two arguments [ex: ./matrix dims m1] >&2      #throw error
+        exit 1 
+    fi
+    if [ ! -r $2 ]                                                        #if file is unreadable
+    then
+        echo Error: cannot read file >&2                                  #throw error
+        exit 1
+    fi
+    dims $input2                                                          #else set input2 equal to $2 argument
+    
+#----------------------------------------------------TRANSPOSE------------------------------------------------#     
+
+elif [ $input1 == "transpose" ]                                           #if argument 1 is transpose
+then
+    if [[ "$#" -gt 2 ]]                                                   #if arguments are greater than 2
+    then
+        echo Error: expects two arguments [ex: ./matrix transpose m1] >&2 #throw error
+        exit 1 
+    fi
+    if [ ! -r $2 ]                                                        #if file is unreadable
+    then
+        echo Error: cannot read file >&2                                  #throw error
+        exit 1
+    fi
+    transpose $input2                                                     #else set input2 equal to $2 argument
+
+#----------------------------------------------------MEAN----------------------------------------------------# 
+
+elif [ $input1 == "mean" ]                                              
+then
+    if [[ "$#" -gt 2 ]]                                                   #if arguments are greater than 2
+    then
+        echo Error: expects two arguments [ex: ./matrix mean m1] >&2      #throw error
+        exit 1 
+    fi
+    if [ ! -r $2 ]                                                        #if file is unreadable
+    then
+        echo Error: cannot read file >&2                                  #throw error
+        exit 1
+    fi
+    mean $input2                                                          #else set input2 equal to $2 argument
+    
+#----------------------------------------------------ADD----------------------------------------------------# 
+
+elif [ $input1 == "add" ]
+then
+    if [[ "$#" -gt 3 || "$#" -lt 3 ]]                                     #if arguments are greater or less than 3    
+    then
+        echo Error: expects three arguments [ex: ./matrix add m1 m2] >&2  #throw error
+        exit 1
+    fi
+    if [ ! -r $2 ] || [ ! -r $3 ]                                         #if files are unreadable 
+    then
+        echo Error: cannot read file >&2                                  #throw error
+        exit 1
+    fi
+    add $input2 $input3                                                   #else set input2 and input3 to $2 and $3 arguments
+    
+#----------------------------------------------------MULTIPLY----------------------------------------------------# 
+
+elif [ $input1 == "multiply" ]
+then
+    if [[ "$#" -gt 3 || "$#" -lt 3 ]]                                           #if arguments are greater or less than 3 
+    then
+        echo Error: expects three arguments [ex: ./matrix multiply m1 m2] >&2   #throw error
+        exit 1
+    fi
+    if [ ! -r $2 ] || [ ! -r $3 ]                                               #if files are unreadable
+    then
+        echo Error: cannot read file >&2
+        exit 1
+    fi
+    multiply $input2 $input3                                                    #else set input2 and input3 to $2 and $3 arguments
+
+#----------------------------------------------------BAD COMMAND----------------------------------------------------#
+
+else
+    echo Error: bad command >&2
+    exit 1
+    
+fi

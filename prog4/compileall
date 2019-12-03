@@ -1,0 +1,8 @@
+#!/bin/bash
+gcc -g -o otp_enc_d otp_enc_d.c server.c method.c server_error.c
+gcc -g -o otp_enc otp_enc.c client.c client_error.c
+
+gcc -g -o otp_dec_d	otp_dec_d.c server.c method.c server_error.c
+gcc -g -o otp_dec otp_dec.c client.c client_error.c
+
+gcc -g -o keygen keygen.c
